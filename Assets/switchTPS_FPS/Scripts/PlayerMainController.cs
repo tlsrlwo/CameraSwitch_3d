@@ -9,7 +9,7 @@ public class PlayerMainController : MonoBehaviour
     
     //------------------------------------ Definitions ----------------------------------------------
     #region
-    [SerializeField]
+    [Serializable]
     public class Components
     {
         public Camera tpCamera;
@@ -111,7 +111,8 @@ public class PlayerMainController : MonoBehaviour
 
     private void Awake()
     {
-        
+        InitComponents();
+        InitSettings();
     }
 
     private void InitComponents()
@@ -128,7 +129,7 @@ public class PlayerMainController : MonoBehaviour
         Com.fpRoot = Com.fpRig.parent;
     }
 
-    private void InitSetting()
+    private void InitSettings()
     {
         //Rigidbody
         if(Com.rBody)
@@ -156,6 +157,74 @@ public class PlayerMainController : MonoBehaviour
         {
             Debug.LogError($"{componentName} 컴포넌트를 인스펙터에 넣어주세요");
         }
+    }
+
+    private void SetValuesByKeyInput()
+    {
+        float h = 0f, v = 0f;
+
+        if (Input.GetKey(Key.moveForward)) v += 1.0f;
+        if (Input.GetKey(Key.moveBackward)) v -= 1.0f;
+        if (Input.GetKey(Key.moveRight)) h += 1.0f;
+        if (Input.GetKey(Key.moveLeft)) h -= 1.0f;
+
+        Vector3 moveInput = new Vector3(h, 0f, v).normalized;
+        _moveDir = Vector3.Lerp(_moveDir, moveInput, MoveOption.runningCoef);
+        _rotation = new Vector2(Input.GetAxisRaw("Mous X"), -Input.GetAxisRaw("Mouse Y"));
+
+        State.isMoving = _moveDir.sqrMagnitude > 0.01f;
+        State.isRunning = Input.GetKey(Key.run);
+    }
+
+    // 1인칭 회전
+    public void Rotate()
+    {
+        float deltaCoef = Time.deltaTime * 50f;
+
+        // 상하 : Fp rig 회전
+        float xRotPrev = Com.fpRig.localEulerAngles.x;
+        float xRotNext = xRotPrev + _rotation.y * CamOption.rotationSpeed * deltaCoef;
+
+        if (xRotNext > 180f)
+            xRotNext -= 360f;
+
+        //좌우 : Fp root 회전
+        float yRotPrev = Com.fpRoot.localEulerAngles.y;
+        float yRotNext = yRotPrev + _rotation.x * CamOption.rotationSpeed * deltaCoef;
+
+        // 상하 회전 가능 여부
+        bool xRotatable = CamOption.lookUpDegree < xRotNext &&
+                          CamOption.lookDownDegree > xRotNext;
+
+        // Fp rig 상하 회전 적용 
+        Com.fpRig.localEulerAngles = Vector3.right * (xRotatable ? xRotNext : xRotPrev);
+
+        // Fp Root 좌우 회전 적용
+        Com.fpRoot.localEulerAngles = Vector3.up * yRotNext;
+    }
+
+    private void Move()
+    {
+        // 이동하지 않는 경우, 미끄럼 방지
+        if(State.isMoving == false)
+        {
+            Com.rBody.velocity = new Vector3(0f, Com.rBody.velocity.y, 0f);
+            return;
+        }
+
+        // 실제 이동 벡터 계산
+        _worldMove = Com.fpRoot.TransformDirection(_moveDir);
+        _worldMove *= (MoveOption.speed) * (State.isRunning ? MoveOption.runningCoef : 1f);
+
+        // Y축 속도는 유지하면서 XZ평면 이동
+        Com.rBody.velocity = new Vector3(_worldMove.x, Com.rBody.velocity.y, _worldMove.z);
+    }
+
+    private void Update()
+    {
+        SetValuesByKeyInput();
+        Rotate();
+        Move();
     }
 
 
